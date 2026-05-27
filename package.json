@@ -1,0 +1,20 @@
+{
+  "name": "hsr-randomizer-infra",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "sync": "tsx scripts/sync.ts",
+    "upload": "tsx scripts/upload.ts",
+    "deploy": "npm run sync && npm run upload"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@types/node": "^24.0.0",
+    "sharp": "^0.34.0",
+    "tsx": "^4.0.0",
+    "typescript": "~6.0.0"
+  }
+}

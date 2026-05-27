@@ -1,0 +1,6 @@
+# Copy this to terraform.tfvars — never commit terraform.tfvars
+#
+# Recommended: set the token via env var instead of writing it to a file:
+#   export TF_VAR_cloudflare_api_token="your-token-here"
+#
+# cloudflare_account_id is already defaulted in variables.tf
