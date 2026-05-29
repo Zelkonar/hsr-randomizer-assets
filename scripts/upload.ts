@@ -12,7 +12,7 @@
  */
 import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { readdirSync, readFileSync, statSync } from "fs";
-import { resolve, relative, extname } from "path";
+import { resolve, relative, extname, sep } from "path";
 
 const ACCOUNT_ID = "668ecbb1536f431b765200f8b2f9fa97";
 const BUCKET = "hsr-randomizer-assets";
@@ -22,7 +22,16 @@ const FORCE = process.env.FORCE === "1";
 const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".png": "image/png",
+  ".json": "application/json",
 };
+
+const IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
+
+// The character-data pointer (data/<lang>/version.json) changes in place, so it
+// is always re-uploaded and must be revalidated rather than cached immutably.
+// Everything else (images, content-hashed json) is immutable.
+const NO_CACHE = "no-cache";
+const ALWAYS_UPLOAD = /^data\/[^/]+\/version\.json$/;
 
 const client = new S3Client({
   region: "auto",
@@ -70,9 +79,12 @@ async function main() {
   let skipped = 0;
 
   for (const file of files) {
-    const key = relative(ASSETS_DIR, file);
+    const key = relative(ASSETS_DIR, file).split(sep).join("/");
+    const cacheControl = ALWAYS_UPLOAD.test(key) ? NO_CACHE : undefined;
 
-    if (existing.has(key)) {
+    // Immutable assets are content-addressed, so an existing key means the
+    // bytes are unchanged. The version pointer is always re-uploaded.
+    if (!cacheControl && existing.has(key)) {
       console.log(`  ↷ ${key} — exists, skipping`);
       skipped++;
       continue;
@@ -84,7 +96,7 @@ async function main() {
       Key: key,
       Body: readFileSync(file),
       ContentType: CONTENT_TYPES[ext] ?? "application/octet-stream",
-      CacheControl: "public, max-age=31536000, immutable",
+      CacheControl: cacheControl ?? IMMUTABLE_CACHE,
     }));
 
     console.log(`  ✓ ${key}`);
