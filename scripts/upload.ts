@@ -74,12 +74,19 @@ async function main() {
   const existing = FORCE ? new Set<string>() : await getExistingKeys();
   console.log(`${existing.size} files already in bucket\n`);
 
-  const files = walkDir(ASSETS_DIR);
+  const toKey = (file: string) => relative(ASSETS_DIR, file).split(sep).join("/");
+
+  // Upload the version pointer(s) last. Clients read version.json to discover
+  // the hashed data file, so the payload must be in the bucket before the
+  // pointer flips to it — otherwise a client briefly 404s the new data file.
+  const files = walkDir(ASSETS_DIR).sort(
+    (a, b) => Number(ALWAYS_UPLOAD.test(toKey(a))) - Number(ALWAYS_UPLOAD.test(toKey(b)))
+  );
   let uploaded = 0;
   let skipped = 0;
 
   for (const file of files) {
-    const key = relative(ASSETS_DIR, file).split(sep).join("/");
+    const key = toKey(file);
     const cacheControl = ALWAYS_UPLOAD.test(key) ? NO_CACHE : undefined;
 
     // Immutable assets are content-addressed, so an existing key means the

@@ -1,0 +1,37 @@
+name: Quality
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+
+jobs:
+    scripts:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: npm
+
+            - run: npm ci
+
+            - run: npm run typecheck
+
+    terraform:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: opentofu/setup-opentofu@v1
+
+            # -backend=false skips the R2 state backend (no credentials needed in CI);
+            # enough to install providers so `validate` can run.
+            - run: tofu init -backend=false
+
+            - run: tofu validate

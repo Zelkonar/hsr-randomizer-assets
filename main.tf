@@ -15,6 +15,13 @@ resource "cloudflare_r2_bucket" "assets" {
   account_id = var.cloudflare_account_id
   name       = "hsr-randomizer-assets"
   location   = "WNAM"
+
+  # The bucket predates Terraform and holds all live assets; never let a plan
+  # destroy/recreate it (re-import instead — see README). Guards accidental
+  # `tofu destroy` and force-replacement.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # The front end fetch()es data/version.json and the hashed character JSON

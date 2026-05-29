@@ -49,6 +49,24 @@ const ELEMENT_MAP: Record<string, string> = {
   Thunder: "Lightning",
 };
 
+// Mirror the front end's strict Path/Element unions (src/types/{path,element}.ts).
+// This data feeds those types directly at runtime, so a value outside these sets
+// would render a broken icon for every user — fail generation instead of shipping
+// it. When the game adds a path/element, add it here, to the *_MAP above if the
+// source name differs, and to the front-end union.
+const VALID_PATHS = new Set([
+  "The Hunt",
+  "Destruction",
+  "Erudition",
+  "Harmony",
+  "Nihility",
+  "Preservation",
+  "Abundance",
+  "Remembrance",
+  "Elation",
+]);
+const VALID_ELEMENTS = new Set(["Fire", "Ice", "Lightning", "Wind", "Quantum", "Imaginary", "Physical"]);
+
 interface RawCharacter {
   id: string;
   name: string;
@@ -73,16 +91,19 @@ interface Character {
 }
 
 function mapPath(raw: string): string {
-  const mapped = PATH_MAP[raw];
-  if (!mapped) {
-    console.warn(`  ⚠  Unknown path "${raw}" - writing as-is. Add it to PATH_MAP.`);
-    return raw;
+  const mapped = PATH_MAP[raw] ?? raw;
+  if (!VALID_PATHS.has(mapped)) {
+    throw new Error(`Unknown path "${raw}" (resolved to "${mapped}"). Add it to PATH_MAP and the front-end Path type.`);
   }
   return mapped;
 }
 
 function mapElement(raw: string): string {
-  return ELEMENT_MAP[raw] ?? raw;
+  const mapped = ELEMENT_MAP[raw] ?? raw;
+  if (!VALID_ELEMENTS.has(mapped)) {
+    throw new Error(`Unknown element "${raw}" (resolved to "${mapped}"). Add it to ELEMENT_MAP and the front-end Element type.`);
+  }
+  return mapped;
 }
 
 function toCharacter(c: RawCharacter): Character {
