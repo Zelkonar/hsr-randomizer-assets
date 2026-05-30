@@ -28,7 +28,7 @@ jobs:
         steps:
             - uses: actions/checkout@v5
 
-            - uses: opentofu/setup-opentofu@v1
+            - uses: opentofu/setup-opentofu@v2
 
             # -backend=false skips the R2 state backend (no credentials needed in CI);
             # enough to install providers so `validate` can run.
