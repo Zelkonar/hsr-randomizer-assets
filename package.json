@@ -10,7 +10,7 @@
     "sync": "tsx scripts/sync.ts",
     "generate": "tsx scripts/generate-characters.ts",
     "upload": "tsx scripts/upload.ts",
-    "deploy": "npm run sync && npm run generate && npm run upload"
+    "deploy": "tsx scripts/deploy.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.0.0",

@@ -1,6 +1,11 @@
 #!/usr/bin/env tsx
 /**
- * Download character images and element/path icons from StarRailRes.
+ * Download character images and element/path icons from StarRailRes, convert to
+ * webp, and write them into the upload tree (assets/characters/).
+ *
+ * By default only characters that are not yet live on the CDN are processed, so
+ * a daily run does no work until a new character ships. Use FORCE=1 to
+ * re-download and overwrite everyone (e.g. to re-compress at new quality).
  *
  * Usage (from repo root):
  *   npm run sync
@@ -10,8 +15,10 @@
 import sharp from "sharp";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { resolve } from "path";
+import { fileURLToPath } from "url";
+import { RAW_BASE, RawCharacter, fetchRawIndex, fetchDeployed } from "./data";
+import { withConcurrency } from "./script-utils";
 
-const RAW_BASE = "https://raw.githubusercontent.com/Mar-7th/StarRailRes/master";
 const OUT_ROOT = resolve(process.cwd(), "assets");
 const FORCE = process.env.FORCE === "1";
 const SYNC_ONLY = process.env.SYNC_ONLY?.trim();
@@ -24,14 +31,6 @@ const VARIANTS = [
 ] as const;
 
 type Variant = (typeof VARIANTS)[number];
-
-interface RawCharacter {
-  id: string;
-  name: string;
-  icon: string;
-  preview: string;
-  portrait: string;
-}
 
 function variantsToSync(): Variant[] {
   if (!SYNC_ONLY) return [...VARIANTS];
@@ -63,36 +62,44 @@ async function convertVariant(character: RawCharacter, variant: Variant): Promis
   console.log(`  ✓ ${variant.dir}/${character.id} (${character.name}) — ${Math.round(original.byteLength / 1024)}KB → ${Math.round(webp.byteLength / 1024)}KB`);
 }
 
-
-async function withConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
-  const results: T[] = [];
-  let index = 0;
-  async function worker() {
-    while (index < tasks.length) results[index] = await tasks[index++]();
-  }
-  await Promise.all(Array.from({ length: limit }, worker));
-  return results;
-}
-
-async function main() {
+export async function main() {
   console.log(`Output: ${OUT_ROOT}\n`);
 
-  const res = await fetch(`${RAW_BASE}/index_min/en/characters.json`);
-  if (!res.ok) throw new Error(`Failed to fetch index: ${res.status}`);
-  const raw: Record<string, RawCharacter> = await res.json();
-  const characters = Object.values(raw).sort((a, b) => Number(a.id) - Number(b.id));
-  console.log(`Fetched ${characters.length} characters.`);
+  const raw = await fetchRawIndex();
+  console.log(`Fetched ${raw.length} characters.`);
 
-  if (FORCE) console.log("FORCE=1 — overwriting existing files");
+  // Only process characters that are not already live. A new character is the
+  // only thing that adds images, and it always appears as a new id here, so
+  // diffing against the deployed id set avoids re-downloading everyone on every
+  // run. FORCE bypasses the diff to rebuild the whole set.
+  let targets = raw;
+  if (FORCE) {
+    console.log("FORCE=1 — syncing all characters, overwriting existing files");
+  } else {
+    const deployed = await fetchDeployed();
+    if (!deployed) {
+      console.log("No deployed data found — syncing all characters.");
+    } else {
+      targets = raw.filter((c) => !deployed.ids.has(Number(c.id)));
+      console.log(`${deployed.ids.size} already deployed; ${targets.length} new to sync.`);
+      if (targets.length === 0) {
+        console.log("Nothing new to sync.");
+        return;
+      }
+    }
+  }
+
   if (SYNC_ONLY) console.log(`SYNC_ONLY=${SYNC_ONLY}`);
 
-  const tasks = characters.flatMap((c) => variantsToSync().map((v) => () => convertVariant(c, v)));
+  const tasks = targets.flatMap((c) => variantsToSync().map((v) => () => convertVariant(c, v)));
   await withConcurrency(tasks, CONCURRENCY);
 
   console.log("\n✓ Done. Run npm run upload to push new files to R2.");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

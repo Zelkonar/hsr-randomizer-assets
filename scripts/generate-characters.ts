@@ -15,127 +15,19 @@
  * Run `npm run upload` afterwards to push to R2 (or `npm run deploy` for the
  * full sync + generate + upload flow).
  */
-import { createHash } from "crypto";
 import { writeFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
-
-// Source language. Only character `name` is language-dependent; everything else
-// (id, element/path enums, image URLs) is universal. Data is namespaced under
-// data/<lang>/ on R2 so adding languages later is purely additive — make this a
-// loop over languages when that day comes.
-const LANG = "en";
-const INDEX_URL = `https://raw.githubusercontent.com/Mar-7th/StarRailRes/master/index_min/${LANG}/characters.json`;
-
-/** R2 custom domain that serves the assets (no trailing slash). */
-const ASSETS_CDN = "https://assets.hsr-randomizer.zelkonar.com";
-/** File extension under each image variant folder ({id}.{ext}). */
-const ASSETS_EXT = "webp";
+import { fileURLToPath } from "url";
+import { LANG, fetchRawIndex, buildCharacterData } from "./data";
 
 const OUT_DIR = resolve(process.cwd(), "assets", "data", LANG);
 
-const PATH_MAP: Record<string, string> = {
-  Knight: "Preservation",
-  Rogue: "The Hunt",
-  Mage: "Erudition",
-  Shaman: "Harmony",
-  Warlock: "Nihility",
-  Warrior: "Destruction",
-  Priest: "Abundance",
-  Memory: "Remembrance",
-  Elation: "Elation",
-};
-
-const ELEMENT_MAP: Record<string, string> = {
-  Thunder: "Lightning",
-};
-
-// Mirror the front end's strict Path/Element unions (src/types/{path,element}.ts).
-// This data feeds those types directly at runtime, so a value outside these sets
-// would render a broken icon for every user — fail generation instead of shipping
-// it. When the game adds a path/element, add it here, to the *_MAP above if the
-// source name differs, and to the front-end union.
-const VALID_PATHS = new Set([
-  "The Hunt",
-  "Destruction",
-  "Erudition",
-  "Harmony",
-  "Nihility",
-  "Preservation",
-  "Abundance",
-  "Remembrance",
-  "Elation",
-]);
-const VALID_ELEMENTS = new Set(["Fire", "Ice", "Lightning", "Wind", "Quantum", "Imaginary", "Physical"]);
-
-interface RawCharacter {
-  id: string;
-  name: string;
-  tag: string;
-  rarity: number;
-  path: string;
-  element: string;
-  icon: string;
-  preview: string;
-  portrait: string;
-}
-
-interface Character {
-  id: number;
-  name: string;
-  element: string;
-  path: string;
-  rarity: number;
-  icon: string;
-  preview: string;
-  portrait: string;
-}
-
-function mapPath(raw: string): string {
-  const mapped = PATH_MAP[raw] ?? raw;
-  if (!VALID_PATHS.has(mapped)) {
-    throw new Error(`Unknown path "${raw}" (resolved to "${mapped}"). Add it to PATH_MAP and the front-end Path type.`);
-  }
-  return mapped;
-}
-
-function mapElement(raw: string): string {
-  const mapped = ELEMENT_MAP[raw] ?? raw;
-  if (!VALID_ELEMENTS.has(mapped)) {
-    throw new Error(`Unknown element "${raw}" (resolved to "${mapped}"). Add it to ELEMENT_MAP and the front-end Element type.`);
-  }
-  return mapped;
-}
-
-function toCharacter(c: RawCharacter): Character {
-  const id = Number(c.id);
-  return {
-    id,
-    name: id >= 8000 ? "Trailblazer" : c.name,
-    element: mapElement(c.element),
-    path: mapPath(c.path),
-    rarity: c.rarity,
-    icon: `${ASSETS_CDN}/characters/icon/${c.id}.${ASSETS_EXT}`,
-    preview: `${ASSETS_CDN}/characters/preview/${c.id}.${ASSETS_EXT}`,
-    portrait: `${ASSETS_CDN}/characters/portrait/${c.id}.${ASSETS_EXT}`,
-  };
-}
-
-async function main() {
+export async function main() {
   console.log("Fetching character index from Mar-7th/StarRailRes...");
-  const res = await fetch(INDEX_URL);
-  if (!res.ok) throw new Error(`Failed to fetch: ${res.status} ${res.statusText}`);
+  const raw = await fetchRawIndex();
+  console.log(`  Found ${raw.length} characters.`);
 
-  const raw = (await res.json()) as Record<string, RawCharacter>;
-  const characters = Object.values(raw)
-    .sort((a, b) => Number(a.id) - Number(b.id))
-    .map(toCharacter);
-
-  console.log(`  Found ${characters.length} characters.`);
-
-  // Canonical JSON for both the file body and the content hash.
-  const body = JSON.stringify(characters);
-  const hash = createHash("sha256").update(body).digest("hex").slice(0, 10);
-  const file = `characters.${hash}.json`;
+  const { body, hash, file, characters } = buildCharacterData(raw);
 
   const version = {
     hash,
@@ -150,10 +42,11 @@ async function main() {
 
   console.log(`  ✓ data/${LANG}/${file}`);
   console.log(`  ✓ data/${LANG}/version.json (hash ${hash})`);
-  console.log("\n✓ Done. Run npm run upload to push to R2.");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

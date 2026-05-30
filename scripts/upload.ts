@@ -13,6 +13,7 @@
 import { S3Client, PutObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { readdirSync, readFileSync, statSync } from "fs";
 import { resolve, relative, extname, sep } from "path";
+import { fileURLToPath } from "url";
 
 const ACCOUNT_ID = "668ecbb1536f431b765200f8b2f9fa97";
 const BUCKET = "hsr-randomizer-assets";
@@ -65,7 +66,7 @@ function walkDir(dir: string): string[] {
   });
 }
 
-async function main() {
+export async function main() {
   if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
     throw new Error("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set");
   }
@@ -113,7 +114,9 @@ async function main() {
   console.log(`\n✓ Done. ${uploaded} uploaded, ${skipped} skipped.`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
